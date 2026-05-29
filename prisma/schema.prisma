@@ -1,0 +1,328 @@
+// ============================================================
+// Salud en Código — Schema de Base de Datos v2
+// PostgreSQL (Supabase) + Prisma ORM
+// Multi-tenant con centroSaludId, audit trail inmutable
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  PROFESIONAL
+  PACIENTE
+}
+
+enum EstadoFicha {
+  BORRADOR
+  VALIDADA
+  ACTIVA
+  REVOCADA
+}
+
+enum FuenteDatos {
+  TEXTO
+  PDF
+  IMAGEN
+}
+
+enum TipoCentro {
+  MINSA
+  ESSALUD
+  PRIVADO
+  MUNICIPAL
+}
+
+enum EstadoAIJob {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AccionAudit {
+  CREATE
+  UPDATE
+  VALIDATE
+  REVOKE
+  ACCESS
+  DELETE
+}
+
+enum DisposicionPago {
+  CENTRO_SALUD
+  PAGO_COMPARTIDO
+  SOLO_PACIENTE
+  NO_PAGARIA
+}
+
+// ─── Auth (NextAuth.js) ──────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          Role      @default(PACIENTE)
+  centroSaludId String?
+  activo        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relaciones
+  centroSalud  CentroSalud? @relation(fields: [centroSaludId], references: [id])
+  accounts     Account[]
+  sessions     Session[]
+  profesional  Profesional?
+  paciente     Paciente?
+
+  @@index([centroSaludId])
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Dominio Clínico ─────────────────────────────────────────
+
+model CentroSalud {
+  id                String     @id @default(cuid())
+  nombre            String
+  distrito          String
+  region            String     @default("Lima")
+  tipo              TipoCentro @default(MINSA)
+  suscripcionActiva Boolean    @default(true)
+  maxProfesionales  Int        @default(10)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Relaciones
+  users         User[]
+  profesionales Profesional[]
+  pacientes     Paciente[]
+}
+
+model Profesional {
+  id             String  @id @default(cuid())
+  userId         String  @unique
+  centroSaludId  String
+  especialidad   String
+  colegioMedico  String? // Número de colegiatura
+  telefono       String?
+  activo         Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relaciones
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  centroSalud         CentroSalud  @relation(fields: [centroSaludId], references: [id])
+  fichas              FichaClinica[]
+  pacientesRegistrados Paciente[]  @relation("PacientesRegistrados")
+
+  @@index([centroSaludId])
+}
+
+model Paciente {
+  id                String    @id @default(cuid())
+  centroSaludId     String
+  userId            String?   @unique  // Cuenta del paciente (opcional)
+  registradoPorId   String?            // Profesional que lo registró
+  nombre            String    // TODO: cifrar con pgcrypto en producción
+  dni               String    // TODO: cifrar con pgcrypto en producción
+  edad              Int
+  fechaNacimiento   DateTime? // Para autenticación del paciente
+  sexo              String?
+  condiciones       String[]  // Ej: ["diabetes_tipo2", "gestante"]
+  telefono          String?
+  activo            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relaciones
+  centroSalud     CentroSalud    @relation(fields: [centroSaludId], references: [id])
+  user            User?          @relation(fields: [userId], references: [id])
+  registradoPor   Profesional?   @relation("PacientesRegistrados", fields: [registradoPorId], references: [id])
+  fichas          FichaClinica[]
+
+  @@unique([dni, centroSaludId])
+  @@index([centroSaludId])
+  @@index([dni])
+  @@index([registradoPorId])
+}
+
+model FichaClinica {
+  id                 String       @id @default(cuid())
+  pacienteId         String
+  profesionalId      String
+  version            Int          @default(1)
+  estado             EstadoFicha  @default(BORRADOR)
+  fuenteDatos        FuenteDatos  @default(TEXTO)
+
+  // Datos originales del profesional
+  textoOriginal      String       @db.Text
+  archivoUrl         String?      // URL del PDF/imagen en storage
+
+  // Ficha simplificada por IA (estructura JSON)
+  diagnostico        String?      @db.Text
+  tratamiento        String?      @db.Text
+  indicaciones       String?      @db.Text
+  signosAlarma       String?      @db.Text
+  proximoControl     String?
+
+  // Metadata IA
+  aiConfidenceScore  Float?       // 0-100
+  aiProvider         String?      // "claude" | "openai"
+  aiProcessedAt      DateTime?
+
+  // Validación
+  validadaPor        String?      // profesionalId que validó
+  validadaEn         DateTime?
+  notasValidacion    String?      @db.Text
+
+  // Timestamps
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  // Relaciones
+  paciente    Paciente     @relation(fields: [pacienteId], references: [id])
+  profesional Profesional  @relation(fields: [profesionalId], references: [id])
+  accesoQR    AccesoQR?
+  feedback    Feedback[]
+  aiJobs      AIJob[]
+
+  @@index([pacienteId])
+  @@index([profesionalId])
+  @@index([estado])
+  @@index([createdAt])
+}
+
+model AccesoQR {
+  id          String   @id @default(cuid())
+  fichaId     String   @unique
+  tokenOpaco  String   @unique // Token aleatorio en la URL del QR
+  pinHash     String   // PIN de 4 dígitos hasheado
+  revocado    Boolean  @default(false)
+  totalAccesos Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  // Relaciones
+  ficha     FichaClinica @relation(fields: [fichaId], references: [id])
+  accesos   LogAccesoQR[]
+
+  @@index([tokenOpaco])
+}
+
+model LogAccesoQR {
+  id          String   @id @default(cuid())
+  accesoQRId  String
+  ip          String?
+  userAgent   String?
+  pinCorrecto Boolean  @default(true)
+  timestamp   DateTime @default(now())
+
+  // Relaciones
+  accesoQR AccesoQR @relation(fields: [accesoQRId], references: [id])
+
+  @@index([accesoQRId])
+  @@index([timestamp])
+}
+
+model Feedback {
+  id               String           @id @default(cuid())
+  fichaId          String
+  comprension      Int              // 1-5 Likert
+  confianza        Int              // 1-5 Likert
+  disposicionPago  DisposicionPago?
+  comentario       String?          @db.Text
+  createdAt        DateTime         @default(now())
+
+  // Relaciones
+  ficha FichaClinica @relation(fields: [fichaId], references: [id])
+
+  @@index([fichaId])
+}
+
+model AIJob {
+  id          String        @id @default(cuid())
+  fichaId     String
+  status      EstadoAIJob   @default(QUEUED)
+  provider    String?       // "claude-sonnet-4-5-20250514" | "gpt-4o-mini"
+  prompt      String?       @db.Text
+  response    String?       @db.Text
+  tokens      Int?
+  durationMs  Int?
+  retries     Int           @default(0)
+  error       String?       @db.Text
+  createdAt   DateTime      @default(now())
+  completedAt DateTime?
+
+  // Relaciones
+  ficha FichaClinica @relation(fields: [fichaId], references: [id])
+
+  @@index([fichaId])
+  @@index([status])
+}
+
+// ─── Audit Trail (Inmutable) ─────────────────────────────────
+// Esta tabla SOLO permite INSERT. No UPDATE ni DELETE.
+// Configurar en Supabase con RLS policy + trigger.
+
+model AuditLog {
+  id         BigInt       @id @default(autoincrement())
+  tabla      String       // "ficha_clinica", "paciente", "acceso_qr"
+  registroId String       // ID del registro afectado
+  accion     AccionAudit
+  userId     String?      // Quién hizo la acción
+  cambios    Json?        // { before: {...}, after: {...} }
+  ip         String?
+  userAgent  String?
+  timestamp  DateTime     @default(now())
+
+  @@index([tabla, registroId])
+  @@index([userId])
+  @@index([timestamp])
+}
