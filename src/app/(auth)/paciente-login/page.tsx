@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { HeartPulse, Loader2, AlertCircle, Calendar, CreditCard } from "lucide-react";
+import { HeartPulse, Loader2, AlertCircle, Calendar, CreditCard, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import Link from "next/link";
 
 type Modo = "login" | "registro";
 
@@ -85,7 +86,12 @@ export default function PacienteLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 bg-gradient-to-b from-emerald-50 to-white">
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12 bg-gradient-to-b from-emerald-50 to-white relative">
+      <div className="absolute top-5 left-6">
+        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 transition">
+          <ArrowLeft className="w-4 h-4" /> Volver al inicio
+        </Link>
+      </div>
       <div className="w-16 h-16 rounded-2xl bg-emerald-700 flex items-center justify-center shadow-lg mb-4">
         <HeartPulse className="w-8 h-8 text-white" />
       </div>
@@ -176,19 +182,14 @@ export default function PacienteLoginPage() {
         {modo === "registro" && !exito && (
           <div className="mt-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-100">
             <p className="text-xs text-amber-800 leading-relaxed">
-              Para crear tu cuenta, tu doctor debe haberte registrado previamente y guardado tu fecha de nacimiento en el sistema.
+              Para crear tu cuenta, tu doctor debe haberte registrado en el sistema e ingresado tu fecha de nacimiento.
             </p>
           </div>
         )}
 
-        <p className="text-[10px] text-gray-400 mt-6 text-center">
-          Salud en Codigo - Datos protegidos Ley 29733
+        <p className="text-[10px] text-center text-gray-400 mt-6">
+          Datos protegidos bajo la Ley 29733
         </p>
-        <div className="mt-3 text-center">
-          <a href="/login" className="text-xs text-gray-400 underline underline-offset-2">
-            Soy profesional de salud
-          </a>
-        </div>
       </div>
     </div>
   );

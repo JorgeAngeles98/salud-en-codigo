@@ -244,7 +244,7 @@ export default function PacientesPage() {
             después de registrarlo.
           </p>
 
-          <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto px-5 py-4 bg-white/95 backdrop-blur border-t border-gray-100">
+          <div className="fixed bottom-[65px] left-0 right-0 max-w-lg mx-auto px-5 py-3 bg-white/95 backdrop-blur border-t border-gray-100">
             <Button
               type="submit"
               className="w-full bg-emerald-700 hover:bg-emerald-800"
@@ -260,7 +260,7 @@ export default function PacientesPage() {
               )}
             </Button>
           </div>
-          <div className="h-20" />
+          <div className="h-32" />
         </form>
       </div>
     );

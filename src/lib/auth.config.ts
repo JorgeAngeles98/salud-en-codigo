@@ -20,7 +20,7 @@ export const authConfig: NextAuthConfig = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.role = token.role as string;
+        session.user.role = token.role as import("@prisma/client").Role;
         session.user.centroSaludId = token.centroSaludId as string | null;
         session.user.centroSaludNombre = token.centroSaludNombre as string | null;
       }

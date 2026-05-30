@@ -18,7 +18,7 @@ export default async function PacienteHomePage() {
       </div>
 
       {/* Acciones principales */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <Link href="/paciente/historial">
           <Card className="border-emerald-100 hover:border-emerald-300 hover:shadow-sm transition cursor-pointer">
             <CardContent className="p-4 flex items-center gap-4">
@@ -36,20 +36,22 @@ export default async function PacienteHomePage() {
           </Card>
         </Link>
 
-        <Card className="border-gray-100">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-              <QrCode className="w-6 h-6 text-teal-600" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-gray-800">Tengo un codigo QR</p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Escanea el QR o ingresa el enlace que te dio tu doctor
-              </p>
-            </div>
-            <ArrowRight className="w-4 h-4 text-gray-300 shrink-0" />
-          </CardContent>
-        </Card>
+        <Link href="/paciente/ingresar-qr">
+          <Card className="border-teal-100 hover:border-teal-300 hover:shadow-sm transition cursor-pointer">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+                <QrCode className="w-6 h-6 text-teal-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-gray-800">Tengo un codigo QR</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Ingresa el enlace o token que te dio tu doctor
+                </p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-gray-300 shrink-0" />
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Info */}

@@ -36,10 +36,10 @@ const ROL_LABEL: Record<string, string> = {
   ADMIN: "Administrador", PROFESIONAL: "Profesional de Salud", PACIENTE: "Paciente",
 };
 const ROL_COLOR: Record<string, string> = {
-  ADMIN: "bg-blue-50 text-blue-700", PROFESIONAL: "bg-emerald-50 text-emerald-700", PACIENTE: "bg-sky-50 text-sky-700",
+  ADMIN: "bg-emerald-50 text-emerald-700", PROFESIONAL: "bg-emerald-50 text-emerald-700", PACIENTE: "bg-emerald-50 text-emerald-700",
 };
 const ROL_BG: Record<string, string> = {
-  ADMIN: "from-emerald-700 to-green-900", PROFESIONAL: "from-emerald-500 to-teal-600", PACIENTE: "from-sky-500 to-blue-600",
+  ADMIN: "from-emerald-700 to-green-900", PROFESIONAL: "from-emerald-500 to-teal-600", PACIENTE: "from-emerald-700 to-green-900",
 };
 
 export function PerfilPage({ nombre, email, role, centroNombre, especialidad, colegioMedico, telefono }: PerfilPageProps) {
@@ -48,6 +48,12 @@ export function PerfilPage({ nombre, email, role, centroNombre, especialidad, co
   const [exito, setExito] = useState("");
   const [error, setError] = useState("");
 
+  // Estado actual de los datos (se actualiza tras guardar)
+  const [nombreActual, setNombreActual] = useState(nombre ?? "");
+  const [especialidadActual, setEspecialidadActual] = useState(especialidad ?? "");
+  const [colegioMedicoActual, setColegioMedicoActual] = useState(colegioMedico ?? "");
+  const [telefonoActual, setTelefonoActual] = useState(telefono ?? "");
+
   // Form editar perfil
   const [editForm, setEditForm] = useState({
     nombre: nombre ?? "",
@@ -55,7 +61,6 @@ export function PerfilPage({ nombre, email, role, centroNombre, especialidad, co
     colegioMedico: colegioMedico ?? "",
     telefono: telefono ?? "",
   });
-  const [nombreActual, setNombreActual] = useState(nombre ?? "");
 
   // Form contraseña
   const [pwForm, setPwForm] = useState({ actual: "", nueva: "", confirmar: "" });
@@ -71,7 +76,11 @@ export function PerfilPage({ nombre, email, role, centroNombre, especialidad, co
         colegioMedico: editForm.colegioMedico || undefined,
         telefono: editForm.telefono || undefined,
       });
+      // Actualizar estado local con los nuevos valores
       setNombreActual(editForm.nombre.trim());
+      setEspecialidadActual(editForm.especialidad);
+      setColegioMedicoActual(editForm.colegioMedico);
+      setTelefonoActual(editForm.telefono);
       setSeccion("main");
       mostrarExito("Perfil actualizado correctamente");
     } catch (e) { setError(e instanceof Error ? e.message : "Error al guardar"); }
@@ -149,7 +158,7 @@ export function PerfilPage({ nombre, email, role, centroNombre, especialidad, co
             </>
           )}
 
-          <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto px-5 py-4 bg-white/95 backdrop-blur border-t border-gray-100">
+          <div className="fixed bottom-[65px] left-0 right-0 max-w-lg mx-auto px-5 py-3 bg-white/95 backdrop-blur border-t border-gray-100">
             <Button type="submit" className="w-full bg-emerald-700 hover:bg-emerald-800" disabled={guardando}>
               {guardando ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Guardando...</> : "Guardar cambios"}
             </Button>
@@ -193,7 +202,7 @@ export function PerfilPage({ nombre, email, role, centroNombre, especialidad, co
             </div>
           ))}
 
-          <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto px-5 py-4 bg-white/95 backdrop-blur border-t border-gray-100">
+          <div className="fixed bottom-[65px] left-0 right-0 max-w-lg mx-auto px-5 py-3 bg-white/95 backdrop-blur border-t border-gray-100">
             <Button type="submit" className="w-full bg-emerald-700 hover:bg-emerald-800" disabled={guardando}>
               {guardando ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Actualizando...</> : "Actualizar contraseña"}
             </Button>
@@ -255,38 +264,38 @@ export function PerfilPage({ nombre, email, role, centroNombre, especialidad, co
               </div>
             )}
 
-            {especialidad && (
+            {especialidadActual && (
               <div className="flex items-center gap-3 px-4 py-3.5">
                 <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
                   <Stethoscope className="w-4 h-4 text-emerald-600" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wider">Especialidad</p>
-                  <p className="text-sm text-gray-800">{especialidad}</p>
+                  <p className="text-sm text-gray-800">{especialidadActual}</p>
                 </div>
               </div>
             )}
 
-            {colegioMedico && (
+            {colegioMedicoActual && (
               <div className="flex items-center gap-3 px-4 py-3.5">
                 <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
                   <Award className="w-4 h-4 text-emerald-600" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wider">N° Colegiatura</p>
-                  <p className="text-sm text-gray-800">{colegioMedico}</p>
+                  <p className="text-sm text-gray-800">{colegioMedicoActual}</p>
                 </div>
               </div>
             )}
 
-            {telefono && (
+            {telefonoActual && (
               <div className="flex items-center gap-3 px-4 py-3.5">
                 <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
                   <Phone className="w-4 h-4 text-gray-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wider">Teléfono</p>
-                  <p className="text-sm text-gray-800">{telefono}</p>
+                  <p className="text-sm text-gray-800">{telefonoActual}</p>
                 </div>
               </div>
             )}
@@ -295,7 +304,7 @@ export function PerfilPage({ nombre, email, role, centroNombre, especialidad, co
 
         {/* Acciones */}
         <div className="space-y-2">
-          <button onClick={() => { setSeccion("editar"); setError(""); setEditForm({ nombre: nombreActual, especialidad: especialidad ?? "", colegioMedico: colegioMedico ?? "", telefono: telefono ?? "" }); }}
+          <button onClick={() => { setSeccion("editar"); setError(""); setEditForm({ nombre: nombreActual, especialidad: especialidadActual, colegioMedico: colegioMedicoActual, telefono: telefonoActual }); }}
             className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-gray-100 hover:bg-gray-50 active:scale-[0.98] transition text-left">
             <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
               <Pencil className="w-4 h-4 text-blue-600" />
