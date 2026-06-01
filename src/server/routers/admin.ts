@@ -485,4 +485,38 @@ export const adminRouter = router({
       });
       return { success: true };
     }),
+
+  // Reset contraseña de un profesional (genera contraseña temporal)
+  resetPasswordProfesional: adminProcedure
+    .input(z.object({ userId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const centroId = ctx.centroSaludId as string;
+
+      const user = await ctx.prisma.user.findFirst({
+        where: { id: input.userId, centroSaludId: centroId },
+      });
+      if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Usuario no encontrado" });
+
+      // Generar contraseña temporal de 8 caracteres
+      const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+      const tempPassword = Array.from({ length: 8 }, () =>
+        chars[Math.floor(Math.random() * chars.length)]
+      ).join("");
+
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+      await ctx.prisma.user.update({
+        where: { id: input.userId },
+        data: { passwordHash },
+      });
+
+      await ctx.prisma.auditLog.create({
+        data: {
+          tabla: "profesional", registroId: input.userId, accion: "UPDATE",
+          userId: ctx.user.id, cambios: { after: { accion: "reset_password" } },
+        },
+      });
+
+      return { tempPassword };
+    }),
 });

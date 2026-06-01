@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   // Orígenes permitidos para acceder al servidor de desarrollo desde
@@ -20,6 +21,9 @@ const nextConfig: NextConfig = {
 
   // Turbopack: WebSocket HMR accesible desde red local
   turbopack: {
+    // Fija la raíz del workspace a esta carpeta para evitar que Next.js
+    // elija por error el package-lock.json de C:\Users\jorge como raíz.
+    root: path.resolve(__dirname),
     resolveExtensions: [".tsx", ".ts", ".jsx", ".js"],
   },
 

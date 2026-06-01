@@ -44,6 +44,7 @@ type Vista = "lista" | "nuevo" | "editar";
 
 export default function AdminProfesionalesPage() {
   const [vista, setVista] = useState<Vista>("lista");
+  const [tempPassword, setTempPassword] = useState<{ nombre: string; password: string } | null>(null);
   const [profesionales, setProfesionales] = useState<Profesional[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
@@ -172,6 +173,17 @@ export default function AdminProfesionalesPage() {
     } catch (err) { alert(err instanceof Error ? err.message : "Error"); }
   }
 
+  // ── Reset contraseña ───────────────────────────────────────────────────────
+  async function resetPassword(p: Profesional) {
+    if (!confirm(`¿Resetear la contraseña de ${p.user.name}? Se generará una contraseña temporal que debes entregarle.`)) return;
+    try {
+      const res = await trpcMutation<{ tempPassword: string }>(
+        "admin.resetPasswordProfesional", { userId: p.id }
+      );
+      setTempPassword({ nombre: p.user.name ?? "Doctor", password: res.tempPassword });
+    } catch (err) { setError(err instanceof Error ? err.message : "Error al resetear"); }
+  }
+
   // ── Vista: Formulario nuevo ────────────────────────────────────────────────
   if (vista === "nuevo") {
     return (
@@ -282,6 +294,7 @@ export default function AdminProfesionalesPage() {
 
   // ── Vista: Lista ───────────────────────────────────────────────────────────
   return (
+    <>
     <div className="px-4 py-5 space-y-4">
       <div className="flex items-center justify-between">
         <div>
@@ -336,6 +349,11 @@ export default function AdminProfesionalesPage() {
                     className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition ${p.activo ? "text-orange-600 bg-orange-50 hover:bg-orange-100" : "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"}`}>
                     {p.activo ? <><ShieldOff className="w-3.5 h-3.5" />Desactivar</> : <><ShieldCheck className="w-3.5 h-3.5" />Activar</>}
                   </button>
+                  <button onClick={() => resetPassword(p)}
+                    className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition"
+                    title="Resetear contraseña">
+                    <KeyRound className="w-3.5 h-3.5" />
+                  </button>
                   <button onClick={() => eliminar(p)} disabled={p._count.fichas > 0}
                     className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 transition disabled:opacity-30 disabled:cursor-not-allowed"
                     title={p._count.fichas > 0 ? "Tiene fichas, no se puede eliminar" : "Eliminar"}>
@@ -348,5 +366,33 @@ export default function AdminProfesionalesPage() {
         </div>
       )}
     </div>
+
+      {tempPassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-5">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">Contrasena temporal</h3>
+              <button onClick={() => setTempPassword(null)} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-100">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600">
+              Entregale esta contrasena temporal a <strong>{tempPassword.nombre}</strong>. Debera cambiarla desde su perfil.
+            </p>
+            <div className="bg-blue-50 rounded-xl p-4 text-center">
+              <p className="text-[11px] text-blue-400 uppercase tracking-wider mb-1">Contrasena temporal</p>
+              <p className="text-2xl font-bold font-mono tracking-widest text-blue-900">{tempPassword.password}</p>
+            </div>
+            <p className="text-[11px] text-gray-400 text-center">Copiala antes de cerrar</p>
+            <Button className="w-full bg-emerald-700 hover:bg-emerald-800" onClick={() => {
+              navigator.clipboard.writeText(tempPassword.password);
+              setTempPassword(null);
+            }}>
+              Copiar y cerrar
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

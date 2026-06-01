@@ -236,8 +236,9 @@ export default function TextoClinicoPage() {
           </div>
         )}
 
-        {/* Footer */}
-        <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto px-5 py-4 bg-white/95 backdrop-blur border-t border-gray-100">
+        {/* Footer: fondo blanco hasta el borde inferior (cubre el hueco) y
+            boton elevado con pb para quedar pegado sobre la barra de navegacion */}
+        <div className="fixed bottom-0 left-0 right-0 z-40 max-w-lg mx-auto px-5 pt-4 pb-20 bg-white border-t border-gray-100">
           <Button
             onClick={procesarConIA}
             className="w-full bg-emerald-700 hover:bg-emerald-800"
@@ -249,7 +250,7 @@ export default function TextoClinicoPage() {
             }
           </Button>
         </div>
-        <div className="h-20" />
+        <div className="h-36" />
       </div>
     );
   }
@@ -293,7 +294,7 @@ export default function TextoClinicoPage() {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto px-5 py-4 bg-white/95 backdrop-blur border-t border-gray-100 space-y-2">
+      <div className="fixed bottom-0 left-0 right-0 z-40 max-w-lg mx-auto px-5 pt-4 pb-20 bg-white border-t border-gray-100 space-y-2">
         <Button onClick={continuar} className="w-full bg-emerald-700 hover:bg-emerald-800">
           Continuar a validar y generar QR
           <ChevronRight className="w-4 h-4 ml-1" />
@@ -302,7 +303,7 @@ export default function TextoClinicoPage() {
           Editar texto clinico
         </Button>
       </div>
-      <div className="h-28" />
+      <div className="h-52" />
     </div>
   );
 }

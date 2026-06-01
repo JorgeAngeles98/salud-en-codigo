@@ -142,4 +142,107 @@ export const authRouter = router({
 
       return { success: true };
     }),
+
+  // Solicitar recuperación de contraseña
+  forgotPassword: publicProcedure
+    .input(z.object({
+      email: z.string().email(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUnique({
+        where: { email: input.email.toLowerCase() },
+        select: { id: true, name: true, email: true, passwordHash: true },
+      });
+
+      // Siempre retornamos éxito para no exponer si el email existe
+      if (!user || !user.passwordHash) return { success: true };
+
+      // Invalidar tokens anteriores para este email
+      await ctx.prisma.passwordResetToken.updateMany({
+        where: { email: input.email.toLowerCase(), used: false },
+        data: { used: true },
+      });
+
+      // Crear nuevo token (expira en 1 hora)
+      const token = crypto.randomBytes(32).toString("hex");
+      const expires = new Date(Date.now() + 60 * 60 * 1000);
+
+      await ctx.prisma.passwordResetToken.create({
+        data: {
+          email: input.email.toLowerCase(),
+          token,
+          expires,
+        },
+      });
+
+      const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/recuperar-contrasena/reset?token=${token}`;
+
+      await resend.emails.send({
+        from: process.env.RESEND_FROM_EMAIL ?? "noreply@saludencod.igo",
+        to: input.email,
+        subject: "Recupera tu contraseña — Salud en Código",
+        html: `
+          <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+            <h2 style="color: #065f46;">Salud en Código</h2>
+            <p>Hola${user.name ? ` ${user.name}` : ""},</p>
+            <p>Recibimos una solicitud para restablecer tu contraseña.</p>
+            <p>
+              <a href="${resetUrl}"
+                 style="display: inline-block; background: #065f46; color: white;
+                        padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+                Restablecer contraseña
+              </a>
+            </p>
+            <p style="color: #6b7280; font-size: 13px;">
+              Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este mensaje.
+            </p>
+          </div>
+        `,
+      });
+
+      return { success: true };
+    }),
+
+  // Confirmar nueva contraseña con token
+  resetPassword: publicProcedure
+    .input(z.object({
+      token: z.string().min(1),
+      nuevaPassword: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const resetToken = await ctx.prisma.passwordResetToken.findUnique({
+        where: { token: input.token },
+      });
+
+      if (!resetToken || resetToken.used || resetToken.expires < new Date()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "El enlace es inválido o ha expirado. Solicita uno nuevo.",
+        });
+      }
+
+      const user = await ctx.prisma.user.findUnique({
+        where: { email: resetToken.email },
+        select: { id: true },
+      });
+
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario no encontrado." });
+      }
+
+      const passwordHash = await bcrypt.hash(input.nuevaPassword, 10);
+
+      await ctx.prisma.$transaction([
+        ctx.prisma.user.update({
+          where: { id: user.id },
+          data: { passwordHash },
+        }),
+        ctx.prisma.passwordResetToken.update({
+          where: { token: input.token },
+          data: { used: true },
+        }),
+      ]);
+
+      return { success: true };
+    }),
 });

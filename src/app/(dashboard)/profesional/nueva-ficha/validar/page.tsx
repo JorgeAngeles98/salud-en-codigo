@@ -416,8 +416,9 @@ export default function ValidarFichaPage() {
         ))}
       </div>
 
-      {/* Footer fijo */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto px-5 py-4 bg-white/95 backdrop-blur border-t border-gray-100">
+      {/* Footer fijo: fondo blanco hasta el borde inferior y boton elevado
+          con pb para quedar pegado sobre la barra de navegacion */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 max-w-lg mx-auto px-5 pt-4 pb-20 bg-white border-t border-gray-100">
         <Button
           onClick={validarFicha}
           className="w-full bg-emerald-700 hover:bg-emerald-800"
@@ -442,7 +443,7 @@ export default function ValidarFichaPage() {
           )}
         </Button>
       </div>
-      <div className="h-20" />
+      <div className="h-36" />
     </div>
   );
 }
