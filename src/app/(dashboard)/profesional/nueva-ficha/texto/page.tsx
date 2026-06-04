@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -27,7 +27,7 @@ const EJEMPLOS = [
   "IRA superior viral. Fiebre 38.2C, odinofagia, rinorrea hialina. Se indica paracetamol 500mg c/6h PRN. Reposo relativo, hidratacion. Control si no mejora en 72h.",
 ];
 
-export default function TextoClinicoPage() {
+function TextoClinicoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pacienteId = searchParams.get("pacienteId") ?? "";
@@ -305,6 +305,20 @@ export default function TextoClinicoPage() {
       </div>
       <div className="h-52" />
     </div>
+  );
+}
+
+export default function TextoClinicoPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+        </div>
+      }
+    >
+      <TextoClinicoContent />
+    </Suspense>
   );
 }
 
