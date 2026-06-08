@@ -23,7 +23,7 @@ informacion clara, sencilla y comprensible para un paciente con bajo nivel de al
 REGLAS IMPORTANTES:
 1. Usa un lenguaje muy simple, como si hablaras con alguien de educacion basica
 2. Evita terminos medicos tecnicos; si debes usarlos, explicalos entre parentesis
-3. Se directo y concreto, no uses frases largas
+3. DESARROLLA y EXPLICA bien lo que el medico escribio: para cada diagnostico, explica en palabras simples QUE es la condicion, POR QUE le pasa y QUE significa para el paciente en su dia a dia. El objetivo es que el paciente entienda de verdad, no solo una frase corta.
 4. Usa el contexto del paciente (edad, condiciones) para personalizar la explicacion
 5. Los signos de alarma deben ser MUY claros, usar frases como "Ve a emergencia si..."
 
@@ -40,8 +40,8 @@ FORMATO:
 7. Responde SIEMPRE en el siguiente formato JSON exacto, sin texto adicional:
 
 {
-  "diagnostico": "Explicacion simple de TODO lo que tiene el paciente segun la nota (max 4 oraciones)",
-  "tratamiento": "Lista clara de TODOS los medicamentos de la nota con nombre, dosis y horario tal como aparecen; si un dato no esta, di 'segun te indique tu medico'",
+  "diagnostico": "Explicacion DESARROLLADA y simple de TODO lo que tiene el paciente segun la nota: que es cada condicion, por que ocurre y que implica para el paciente, en lenguaje sencillo",
+  "tratamiento": "Lista clara de TODOS los medicamentos de la nota con nombre, dosis y horario tal como aparecen, explicando para que sirve cada uno; si un dato no esta, di 'segun te indique tu medico'",
   "indicaciones": "Que debe hacer el paciente en casa segun la nota: dieta, reposo, cuidados especificos",
   "signosAlarma": "Senales de peligro por las que debe ir a emergencia (sin repetir 'Ve a emergencia si')",
   "proximoControl": "Cuando regresar SOLO si la nota lo indica; si no, 'Pregunta a tu medico cuando debes regresar'"
@@ -66,7 +66,7 @@ async function llamarGroq(systemPrompt: string, userPrompt: string): Promise<str
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    max_tokens: 1024,
+    max_tokens: 2048,
     temperature: 0.3,
   });
 
@@ -79,7 +79,7 @@ async function llamarAnthropic(systemPrompt: string, userPrompt: string): Promis
 
   const message = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 1024,
+    max_tokens: 2048,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
   });
@@ -142,17 +142,29 @@ Simplifica esta informacion para el paciente.`;
       proveedor = "anthropic/claude";
     }
 
-    // Parsear JSON
-    let resultado: SimplificarResponse;
+    // Parsear JSON (con rescate del primer objeto {...} si viene texto extra)
+    let resultado: SimplificarResponse | null = null;
+    const limpio = responseText.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
     try {
-      const jsonLimpio = responseText
-        .replace(/```json\s*/gi, "")
-        .replace(/```\s*/gi, "")
-        .trim();
-      resultado = JSON.parse(jsonLimpio);
+      resultado = JSON.parse(limpio);
     } catch {
+      const ini = limpio.indexOf("{");
+      const fin = limpio.lastIndexOf("}");
+      if (ini !== -1 && fin > ini) {
+        try {
+          resultado = JSON.parse(limpio.slice(ini, fin + 1));
+        } catch {
+          resultado = null;
+        }
+      }
+    }
+
+    if (!resultado) {
       return NextResponse.json(
-        { error: "La IA no pudo procesar el texto. Intenta con una nota mas detallada.", rawResponse: responseText },
+        {
+          error: "No se pudo interpretar el texto. Es posible que el documento escaneado no se haya leido bien; revisa o corrige el texto en el campo antes de simplificar.",
+          rawResponse: responseText,
+        },
         { status: 422 }
       );
     }
@@ -169,6 +181,13 @@ Simplifica esta informacion para el paciente.`;
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error desconocido";
     console.error("[AI] Error:", msg);
+    // Limite de uso gratuito de Groq alcanzado
+    if (/rate limit|429|tokens per day|rate_limit/i.test(msg)) {
+      return NextResponse.json(
+        { error: "Se alcanzo el limite diario de uso gratuito de la IA. Intenta de nuevo en unos minutos." },
+        { status: 429 }
+      );
+    }
     return NextResponse.json({ error: `Error al procesar con IA: ${msg}` }, { status: 500 });
   }
 }

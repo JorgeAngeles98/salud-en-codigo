@@ -40,6 +40,7 @@ function TextoClinicoContent() {
 
   const [estadoOCR, setEstadoOCR] = useState<EstadoOCR>("idle");
   const [ocrInfo, setOcrInfo] = useState<string | null>(null);
+  const [ocrProgreso, setOcrProgreso] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── OCR: subir PDF o imagen ──────────────────────────────────────────────────
@@ -48,29 +49,109 @@ function TextoClinicoContent() {
     setEstadoOCR("subiendo");
     setError("");
     setOcrInfo(null);
+    setOcrProgreso("");
 
-    const formData = new FormData();
-    formData.append("file", file);
+    const esPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
     try {
-      const res = await fetch("/api/ocr", { method: "POST", body: formData });
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        setError(data.error ?? "Error al procesar el archivo");
-        return;
+      if (esPdf) {
+        // PDF: OCR en el navegador (soporta escaneados, sin subir el archivo)
+        await ocrPdfEnNavegador(file);
+      } else {
+        // Imagen: OCR en el navegador (sin depender del servidor)
+        await ocrImagenEnNavegador(file);
       }
-
-      setTexto(data.texto);
-      const fuente = data.fuente === "PDF"
-        ? `PDF procesado (${data.paginas ?? 1} pag.)`
-        : `Imagen procesada (confianza ${data.confianza ?? "?"}%)`;
-      setOcrInfo(fuente);
-    } catch {
-      setError("Error de conexion al procesar el archivo");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al procesar el archivo");
     } finally {
       setEstadoOCR("idle");
+      setOcrProgreso("");
     }
+  }
+
+  // OCR de imagen en el navegador (con preprocesamiento para mejor lectura)
+  async function ocrImagenEnNavegador(file: File) {
+    setOcrProgreso("Leyendo la imagen...");
+    const { createWorker } = await import("tesseract.js");
+    const worker = await createWorker("spa");
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("No se pudo procesar la imagen");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bitmap, 0, 0);
+      preprocesarParaOcr(ctx, canvas.width, canvas.height);
+
+      const { data } = await worker.recognize(canvas);
+      const texto = data.text.trim();
+      if (texto.length < 10) {
+        throw new Error("No se pudo extraer texto de la imagen. Usa una foto mas clara.");
+      }
+      setTexto(texto);
+      setOcrInfo("Imagen procesada con OCR");
+    } finally {
+      await worker.terminate();
+    }
+  }
+
+  // OCR de PDF directamente en el navegador: pdf.js renderiza cada pagina a
+  // imagen y tesseract.js extrae el texto. Solo se usa el texto final.
+  async function ocrPdfEnNavegador(file: File) {
+    const pdfjs = await import("pdfjs-dist");
+    // Worker desde CDN con la version exacta instalada (robusto en produccion)
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+    const { createWorker } = await import("tesseract.js");
+
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+    const totalPaginas = pdf.numPages;
+
+    const worker = await createWorker("spa");
+    let textoAcumulado = "";
+
+    try {
+      for (let n = 1; n <= totalPaginas; n++) {
+        setOcrProgreso(`Página ${n} de ${totalPaginas}...`);
+
+        const page = await pdf.getPage(n);
+        const viewport = page.getViewport({ scale: 3 }); // 3x: mejor resolucion para OCR de escaneos
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) continue;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        // Fondo blanco (evita que paginas con transparencia salgan oscuras)
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+
+        // Preprocesar: escala de grises + contraste para mejorar el OCR
+        preprocesarParaOcr(ctx, canvas.width, canvas.height);
+
+        const { data } = await worker.recognize(canvas);
+        textoAcumulado += data.text.trim() + "\n\n";
+
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    } finally {
+      await worker.terminate();
+    }
+
+    const textoFinal = textoAcumulado.trim();
+    if (textoFinal.length < 10) {
+      throw new Error("No se pudo extraer texto del PDF. Asegúrate de que el escaneo sea claro y legible.");
+    }
+
+    setTexto(textoFinal);
+    setOcrInfo(`PDF procesado con OCR (${totalPaginas} pág.)`);
   }
 
   // ── Llamar a Claude ──────────────────────────────────────────────────────────
@@ -182,7 +263,7 @@ function TextoClinicoContent() {
             className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-emerald-300 text-sm text-emerald-700 hover:bg-emerald-50 transition disabled:opacity-50"
           >
             {estadoOCR === "subiendo"
-              ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" />Extrayendo texto del archivo...</>
+              ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" />{ocrProgreso || "Extrayendo texto del archivo..."}</>
               : <><Upload className="w-4 h-4 shrink-0" /><FileImage className="w-4 h-4 shrink-0 -ml-1" />Subir PDF o imagen para extraer texto (OCR)</>
             }
           </button>
@@ -320,6 +401,24 @@ export default function TextoClinicoPage() {
       <TextoClinicoContent />
     </Suspense>
   );
+}
+
+// Mejora la imagen antes del OCR: escala de grises + aumento de contraste.
+// Esto ayuda a tesseract a distinguir el texto en escaneos de baja calidad.
+function preprocesarParaOcr(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const d = imageData.data;
+  const contraste = 1.6; // >1 aumenta el contraste
+  const intercepto = 128 * (1 - contraste);
+  for (let i = 0; i < d.length; i += 4) {
+    // Luminancia (escala de grises)
+    let gris = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    // Contraste
+    gris = gris * contraste + intercepto;
+    gris = gris < 0 ? 0 : gris > 255 ? 255 : gris;
+    d[i] = d[i + 1] = d[i + 2] = gris;
+  }
+  ctx.putImageData(imageData, 0, 0);
 }
 
 type Color = "emerald" | "teal" | "blue" | "red" | "purple";

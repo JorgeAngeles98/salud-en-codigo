@@ -46,6 +46,71 @@ export const pacienteRouter = router({
       return paciente;
     }),
 
+  // Editar paciente — solo quien lo registró (o un admin del centro)
+  update: profesionalProcedure
+    .input(z.object({
+      id: z.string(),
+      nombre: z.string().min(2, "Nombre requerido"),
+      dni: z.string().min(8, "DNI debe tener al menos 8 caracteres"),
+      edad: z.number().int().min(0).max(120),
+      fechaNacimiento: z.string().optional(),
+      sexo: z.enum(["M", "F"]).optional(),
+      condiciones: z.array(z.string()).default([]),
+      telefono: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // El paciente debe existir y pertenecer a este centro
+      const paciente = await ctx.prisma.paciente.findFirst({
+        where: { id: input.id, centroSaludId: ctx.centroSaludId },
+      });
+      if (!paciente) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Paciente no encontrado" });
+      }
+
+      // Permiso: solo quien lo registró, o un admin (sin registro de profesional)
+      const profesional = await ctx.prisma.profesional.findUnique({
+        where: { userId: ctx.user.id },
+      });
+      if (profesional && paciente.registradoPorId !== profesional.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Solo el profesional que registró al paciente puede editarlo",
+        });
+      }
+
+      // Si cambió el DNI, verificar que no choque con otro paciente del centro
+      if (input.dni !== paciente.dni) {
+        const dniEnUso = await ctx.prisma.paciente.findUnique({
+          where: { dni_centroSaludId: { dni: input.dni, centroSaludId: ctx.centroSaludId } },
+        });
+        if (dniEnUso) {
+          throw new TRPCError({ code: "CONFLICT", message: "Ya existe otro paciente con ese DNI en este centro" });
+        }
+      }
+
+      const { id, fechaNacimiento, ...resto } = input;
+      const actualizado = await ctx.prisma.paciente.update({
+        where: { id },
+        data: {
+          ...resto,
+          fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : undefined,
+        },
+      });
+
+      await ctx.prisma.auditLog.create({
+        data: {
+          tabla: "paciente", registroId: id, accion: "UPDATE",
+          userId: ctx.user.id,
+          cambios: {
+            before: { nombre: paciente.nombre, dni: paciente.dni, edad: paciente.edad, condiciones: paciente.condiciones, telefono: paciente.telefono, sexo: paciente.sexo },
+            after: resto,
+          },
+        },
+      });
+
+      return actualizado;
+    }),
+
   // Listar solo los pacientes registrados por este profesional
   list: profesionalProcedure
     .input(z.object({

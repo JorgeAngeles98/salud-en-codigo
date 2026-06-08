@@ -6,10 +6,10 @@ import {
   Search,
   UserPlus,
   User,
-  ChevronRight,
   Loader2,
   X,
   FilePlus,
+  Pencil,
   AlertCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -60,7 +60,18 @@ async function trpcMutation<T>(path: string, input: object): Promise<T> {
   return (data.result?.data?.json ?? data.result?.data) as T;
 }
 
-type Vista = "lista" | "nuevo";
+type Vista = "lista" | "nuevo" | "editar";
+
+const CONDICIONES_DISPONIBLES = Object.keys(CONDICION_LABEL);
+
+const FORM_VACIO = {
+  nombre: "",
+  dni: "",
+  edad: "",
+  sexo: "",
+  fechaNacimiento: "",
+  condiciones: [] as string[],
+};
 
 export default function PacientesPage() {
   const router = useRouter();
@@ -69,15 +80,40 @@ export default function PacientesPage() {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [cargando, setCargando] = useState(true);
   const [errorLista, setErrorLista] = useState("");
-  const [form, setForm] = useState({
-    nombre: "",
-    dni: "",
-    edad: "",
-    sexo: "",
-    fechaNacimiento: "",
-  });
+  const [form, setForm] = useState(FORM_VACIO);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
   const [creando, setCreando] = useState(false);
   const [errorForm, setErrorForm] = useState("");
+
+  function abrirNuevo() {
+    setForm(FORM_VACIO);
+    setEditandoId(null);
+    setErrorForm("");
+    setVista("nuevo");
+  }
+
+  function abrirEdicion(p: Paciente) {
+    setForm({
+      nombre: p.nombre,
+      dni: p.dni,
+      edad: String(p.edad),
+      sexo: p.sexo ?? "",
+      fechaNacimiento: "",
+      condiciones: p.condiciones ?? [],
+    });
+    setEditandoId(p.id);
+    setErrorForm("");
+    setVista("editar");
+  }
+
+  function toggleCondicion(c: string) {
+    setForm((f) => ({
+      ...f,
+      condiciones: f.condiciones.includes(c)
+        ? f.condiciones.filter((x) => x !== c)
+        : [...f.condiciones, c],
+    }));
+  }
 
   const cargarPacientes = useCallback(async (q: string) => {
     setCargando(true);
@@ -104,24 +140,30 @@ export default function PacientesPage() {
     return () => clearTimeout(t);
   }, [busqueda, cargarPacientes]);
 
-  async function crearPaciente(e: React.FormEvent) {
+  async function guardarPaciente(e: React.FormEvent) {
     e.preventDefault();
     setErrorForm("");
     setCreando(true);
     try {
-      await trpcMutation("paciente.create", {
+      const datos = {
         nombre: form.nombre.trim(),
         dni: form.dni,
         edad: parseInt(form.edad),
         sexo: form.sexo || undefined,
         fechaNacimiento: form.fechaNacimiento || undefined,
-        condiciones: [],
-      });
-      setForm({ nombre: "", dni: "", edad: "", sexo: "", fechaNacimiento: "" });
+        condiciones: form.condiciones,
+      };
+      if (vista === "editar" && editandoId) {
+        await trpcMutation("paciente.update", { id: editandoId, ...datos });
+      } else {
+        await trpcMutation("paciente.create", datos);
+      }
+      setForm(FORM_VACIO);
+      setEditandoId(null);
       setVista("lista");
       cargarPacientes(busqueda);
     } catch (err) {
-      setErrorForm(err instanceof Error ? err.message : "Error al registrar");
+      setErrorForm(err instanceof Error ? err.message : "Error al guardar");
     } finally {
       setCreando(false);
     }
@@ -129,7 +171,8 @@ export default function PacientesPage() {
 
   // ── Formulario nuevo paciente ──────────────────────────────────────────────
 
-  if (vista === "nuevo") {
+  if (vista === "nuevo" || vista === "editar") {
+    const esEdicion = vista === "editar";
     return (
       <div className="px-5 py-5 space-y-4">
         <div className="flex items-center gap-3">
@@ -143,12 +186,16 @@ export default function PacientesPage() {
             <X className="w-4 h-4 text-gray-600" />
           </button>
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Nuevo Paciente</h1>
-            <p className="text-xs text-gray-400">Registra los datos básicos</p>
+            <h1 className="text-lg font-bold text-gray-900">
+              {esEdicion ? "Editar Paciente" : "Nuevo Paciente"}
+            </h1>
+            <p className="text-xs text-gray-400">
+              {esEdicion ? "Modifica los datos del paciente" : "Registra los datos básicos"}
+            </p>
           </div>
         </div>
 
-        <form onSubmit={crearPaciente} className="space-y-4">
+        <form onSubmit={guardarPaciente} className="space-y-4">
           {errorForm && (
             <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -239,10 +286,30 @@ export default function PacientesPage() {
             </p>
           </div>
 
-          <p className="text-xs text-gray-400 bg-gray-50 rounded-xl px-4 py-3 leading-relaxed">
-            Las condiciones crónicas se pueden agregar desde el perfil del paciente
-            después de registrarlo.
-          </p>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              Condiciones crónicas
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {CONDICIONES_DISPONIBLES.map((c) => {
+                const activa = form.condiciones.includes(c);
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => toggleCondicion(c)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition ${
+                      activa
+                        ? "bg-orange-50 text-orange-700 border-orange-200 font-medium"
+                        : "bg-white text-gray-500 border-gray-200 hover:border-orange-200"
+                    }`}
+                  >
+                    {condicionLabel(c)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="fixed bottom-[65px] left-0 right-0 max-w-lg mx-auto px-5 py-3 bg-white/95 backdrop-blur border-t border-gray-100">
             <Button
@@ -253,10 +320,10 @@ export default function PacientesPage() {
               {creando ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Registrando...
+                  Guardando...
                 </>
               ) : (
-                "Registrar paciente"
+                esEdicion ? "Guardar cambios" : "Registrar paciente"
               )}
             </Button>
           </div>
@@ -282,7 +349,7 @@ export default function PacientesPage() {
         <Button
           size="sm"
           className="bg-emerald-700 hover:bg-emerald-800"
-          onClick={() => setVista("nuevo")}
+          onClick={abrirNuevo}
         >
           <UserPlus className="w-4 h-4 mr-1.5" />
           Nuevo
@@ -366,7 +433,17 @@ export default function PacientesPage() {
                     </div>
                   )}
                 </div>
-                <div className="shrink-0 flex flex-col items-center gap-1">
+                <div className="shrink-0 flex items-center gap-1.5">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      abrirEdicion(p);
+                    }}
+                    title="Editar paciente"
+                    className="w-8 h-8 rounded-xl bg-gray-50 hover:bg-gray-100 flex items-center justify-center transition"
+                  >
+                    <Pencil className="w-4 h-4 text-gray-500" />
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -374,11 +451,11 @@ export default function PacientesPage() {
                         `/profesional/nueva-ficha?pacienteId=${p.id}&nombre=${encodeURIComponent(p.nombre)}`
                       );
                     }}
+                    title="Nueva ficha"
                     className="w-8 h-8 rounded-xl bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center transition"
                   >
                     <FilePlus className="w-4 h-4 text-emerald-600" />
                   </button>
-                  <ChevronRight className="w-4 h-4 text-gray-200" />
                 </div>
               </CardContent>
             </Card>
@@ -401,7 +478,7 @@ export default function PacientesPage() {
             <Button
               className="mt-4 bg-emerald-700 hover:bg-emerald-800"
               size="sm"
-              onClick={() => setVista("nuevo")}
+              onClick={abrirNuevo}
             >
               <UserPlus className="w-4 h-4 mr-1.5" />
               Registrar paciente
